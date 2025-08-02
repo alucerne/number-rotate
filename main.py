@@ -78,3 +78,44 @@ def mark_number(data: MarkRequest):
 
     db.commit()
     return {"status": "success", "updated_status": new_status}
+
+from fastapi import Query
+from fastapi.responses import JSONResponse
+from sqlalchemy import asc
+from models import PhoneCandidate, ValidatedPhone
+
+@app.get("/next-number")
+def get_next_number(sha256_id: str = Query(...)):
+    db: Session = SessionLocal()
+
+    # 1. Check if validated number exists
+    verified = db.query(ValidatedPhone).filter_by(sha256_id=sha256_id).first()
+    if verified:
+        return {
+            "status": "verified",
+            "mobile_number": verified.mobile_number,
+            "first_name": verified.first_name,
+            "last_name": verified.last_name
+        }
+
+    # 2. Fallback to phone_candidates
+    next_candidate = (
+        db.query(PhoneCandidate)
+        .filter_by(sha256_id=sha256_id, status="untested")
+        .order_by(asc(PhoneCandidate.priority_order))
+        .first()
+    )
+
+    if next_candidate:
+        return {
+            "status": "candidate",
+            "mobile_number": next_candidate.mobile_number,
+            "first_name": next_candidate.first_name,
+            "last_name": next_candidate.last_name
+        }
+
+    return JSONResponse(
+        status_code=404,
+        content={"error": "No valid or untested numbers available"}
+    )
+
