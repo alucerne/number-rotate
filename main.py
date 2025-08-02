@@ -119,3 +119,43 @@ def get_next_number(sha256_id: str = Query(...)):
         content={"error": "No valid or untested numbers available"}
     )
 
+from typing import List, Optional
+from fastapi import Body
+
+class SeedRequest(BaseModel):
+    sha256_id: str
+    numbers: List[str]
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    source: Optional[str] = "poc_source"
+
+@app.post("/seed-poc")
+def seed_poc(request: SeedRequest):
+    db: Session = SessionLocal()
+
+    # Loop through and insert each number
+    for index, number in enumerate(request.numbers):
+        # Prevent duplicates
+        existing = db.query(PhoneCandidate).filter_by(
+            sha256_id=request.sha256_id,
+            mobile_number=number
+        ).first()
+
+        if not existing:
+            candidate = PhoneCandidate(
+                sha256_id=request.sha256_id,
+                mobile_number=number,
+                first_name=request.first_name,
+                last_name=request.last_name,
+                source=request.source,
+                status="untested",
+                priority_order=index
+            )
+            db.add(candidate)
+
+    db.commit()
+    return {
+        "status": "success",
+        "inserted_count": len(request.numbers)
+    }
+
